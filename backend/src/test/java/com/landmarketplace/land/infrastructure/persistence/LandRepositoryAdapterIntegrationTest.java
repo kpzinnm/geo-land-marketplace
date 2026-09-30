@@ -17,13 +17,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Transactional
-class LandRepositoryAdapterIntegrationTest {
+class LandRepositoryAdapterIntegrationTest extends com.landmarketplace.support.PostgisIntegrationSupport {
+
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
 
     @Autowired
     private LandRepository repository;
 
     private final GeometryFactory geometryFactory =
         new GeometryFactory(new PrecisionModel(), 4326);
+
+    @org.junit.jupiter.api.BeforeEach
+    void cleanDedicatedDatabase() {
+        entityManager.createQuery("delete from LandJpaEntity").executeUpdate();
+        entityManager.clear();
+    }
 
     @Test
     void shouldPersistAndRetrieveLand() {
@@ -37,6 +46,9 @@ class LandRepositoryAdapterIntegrationTest {
         );
 
         Land saved = repository.save(land);
+
+        entityManager.flush();
+        entityManager.clear();
 
         Land retrieved = repository.findById(saved.getId())
             .orElseThrow();
@@ -67,7 +79,7 @@ class LandRepositoryAdapterIntegrationTest {
     }
 
     @Test
-    void shouldAllowSharedBoundary() {
+    void shouldAllowSharedBoundary() {  
         Land land = Land.create(
             new BigDecimal("250000.00"),
             "Existing land",
@@ -80,6 +92,57 @@ class LandRepositoryAdapterIntegrationTest {
         Polygon adjacent = createPolygon(2, 0, 4, 2);
 
         assertFalse(repository.existsOverlappingLand(adjacent));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+        "POLYGON((0 0,2 0,2 2,0 2,0 0))|true",
+        "POLYGON((0.5 0.5,1 0.5,1 1,0.5 1,0.5 0.5))|true",
+        "POLYGON((-1 -1,3 -1,3 3,-1 3,-1 -1))|true",
+        "POLYGON((2 2,3 2,3 3,2 3,2 2))|false",
+        "POLYGON((3 3,4 3,4 4,3 4,3 3))|false"
+    })
+    void shouldClassifyInteriorConflicts(String wkt, boolean conflict) {
+        repository.save(com.landmarketplace.support.LandFixtures.land("POLYGON((0 0,2 0,2 2,0 2,0 0))"));
+        assertEquals(conflict, repository.existsOverlappingLand(com.landmarketplace.support.LandFixtures.polygon(wkt)));
+    }
+
+    @Test
+    void shouldPreserveHolesAndAllowLandInsideAHole() {
+        Land original = com.landmarketplace.support.LandFixtures.land(
+            "POLYGON((0 0,4 0,4 4,0 4,0 0),(1 1,1 3,3 3,3 1,1 1))");
+        repository.save(original);
+        entityManager.clear();
+        Land restored = repository.findById(original.getId()).orElseThrow();
+        assertTrue(original.getGeometry().equalsExact(restored.getGeometry()));
+        assertTrue(Math.abs(java.time.Duration.between(original.getCreatedAt(), restored.getCreatedAt()).toNanos()) < 1000);
+        assertTrue(Math.abs(java.time.Duration.between(original.getUpdatedAt(), restored.getUpdatedAt()).toNanos()) < 1000);
+        assertFalse(repository.existsOverlappingLand(com.landmarketplace.support.LandFixtures.polygon(
+            "POLYGON((1.5 1.5,2 1.5,2 2,1.5 2,1.5 1.5))")));
+        assertTrue(repository.search(2, 2, 100).isEmpty());
+    }
+
+    @Test
+    void shouldSearchByMinimumDistanceInMetersIncludingPartialIntersection() {
+        Land near = repository.save(com.landmarketplace.support.LandFixtures.land(
+            "POLYGON((0.004 -0.001,0.02 -0.001,0.02 0.001,0.004 0.001,0.004 -0.001))"));
+        repository.save(com.landmarketplace.support.LandFixtures.land(
+            "POLYGON((1 1,1.01 1,1.01 1.01,1 1.01,1 1))"));
+        assertEquals(java.util.List.of(near.getId()), repository.search(0, 0, 500).stream().map(Land::getId).toList());
+        assertTrue(repository.search(0, 0, 400).isEmpty());
+        assertEquals(1, repository.search(0.01, 0, 1).size());
+    }
+
+    @Test
+    void shouldIncludeTangencyAtTheMeasuredDistance() {
+        repository.save(com.landmarketplace.support.LandFixtures.land(
+            "POLYGON((0.004 0,0.005 0,0.005 0.001,0.004 0.001,0.004 0))"));
+        double distance = ((Number) entityManager.createNativeQuery("""
+            SELECT public.ST_Distance(geometry::public.geography,
+                public.ST_SetSRID(public.ST_MakePoint(0, 0),4326)::public.geography) FROM app.lands
+            """).getSingleResult()).doubleValue();
+        assertEquals(1, repository.search(0, 0, distance + 0.000001).size());
+        assertTrue(repository.search(0, 0, distance - 0.001).isEmpty());
     }
 
     private Polygon createPolygon(

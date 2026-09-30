@@ -11,13 +11,13 @@ import java.util.UUID;
 @Getter
 public class Land {
 
-    private UUID id;
-    private BigDecimal price;
-    private String description;
-    private String contact;
-    private Polygon geometry;
-    private Instant createdAt;
-    private Instant updatedAt;
+    private final UUID id;
+    private final BigDecimal price;
+    private final String description;
+    private final String contact;
+    private final Polygon geometry;
+    private final Instant createdAt;
+    private final Instant updatedAt;
 
     private Land(
         UUID id,
@@ -76,6 +76,10 @@ public class Land {
         );
     }
 
+    public Polygon getGeometry() {
+        return (Polygon) geometry.copy();
+    }
+
     private static BigDecimal validatePrice(BigDecimal price) {
         Objects.requireNonNull(price, "Price is required");
 
@@ -83,6 +87,9 @@ public class Land {
             throw new IllegalArgumentException("Price must be positive");
         }
 
+        if (price.scale() > 2 || price.precision() - price.scale() > 13) {
+            throw new IllegalArgumentException("Price must fit 13 integer digits and 2 decimal places");
+        }
         return price;
     }
 
@@ -105,7 +112,17 @@ public class Land {
             throw new IllegalArgumentException("Invalid land geometry");
         }
 
-        return geometry;
+        for (var coordinate : geometry.getCoordinates()) {
+            if (!Double.isFinite(coordinate.x) || !Double.isFinite(coordinate.y)
+                || coordinate.x < -180 || coordinate.x > 180
+                || coordinate.y < -90 || coordinate.y > 90) {
+                throw new IllegalArgumentException("Invalid geographic coordinates");
+            }
+        }
+        if (geometry.getEnvelopeInternal().getWidth() >= 180) {
+            throw new IllegalArgumentException("Polygons spanning 180 degrees or crossing the antimeridian are not supported");
+        }
+        return (Polygon) geometry.copy();
     }
 
 }

@@ -1,6 +1,6 @@
 package com.landmarketplace.land.infrastructure.persistence;
 
-import com.landmarketplace.land.infrastructure.persistence.LandJpaEntity;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,24 +11,31 @@ public interface SpringDataLandRepository extends JpaRepository<LandJpaEntity, U
 
     @Query(
         value = """
-            WITH candidate AS (
-                SELECT public.ST_GeomFromText(:wkt, 4326) AS geometry
-            )
             SELECT EXISTS (
                 SELECT 1
                 FROM app.lands existing
-                CROSS JOIN candidate
                 WHERE public.ST_Intersects(
                     existing.geometry,
-                    candidate.geometry
+                    public.ST_GeomFromText(:wkt, 4326)
                 )
                 AND NOT public.ST_Touches(
                     existing.geometry,
-                    candidate.geometry
+                    public.ST_GeomFromText(:wkt, 4326)
                 )
             )
             """,
         nativeQuery = true
     )
     boolean existsOverlappingLand(@Param("wkt") String wkt);
+    @Query(value = """
+        SELECT * FROM app.lands
+        WHERE public.ST_DWithin(
+            geometry::public.geography,
+            public.ST_SetSRID(public.ST_MakePoint(:longitude, :latitude), 4326)::public.geography,
+            :radiusMeters
+        )
+        ORDER BY created_at, id
+        """, nativeQuery = true)
+    List<LandJpaEntity> search(@Param("longitude") double longitude,
+        @Param("latitude") double latitude, @Param("radiusMeters") double radiusMeters);
 }

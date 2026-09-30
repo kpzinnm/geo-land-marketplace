@@ -1,7 +1,9 @@
 package com.landmarketplace.land.infrastructure.persistence;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.locationtech.jts.geom.Polygon;
 
 import java.math.BigDecimal;
@@ -11,6 +13,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "lands", schema = "app")
 @Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class LandJpaEntity {
     @Id
     @Column(name = "id", nullable = false)
