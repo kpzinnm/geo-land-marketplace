@@ -1,6 +1,7 @@
 # Environment
 .env
-.env.local
+.env.*
+!.env.example
 
 # IDE
 .idea/
@@ -23,3 +24,8 @@ frontend/coverage/
 
 # Temp
 docs/
+AGENTS.md
+# Local backups and credentials
+*.bak
+*.key
+*.pem
