@@ -3,3 +3,6 @@ target/
 .env*
 src/test/
 *.log
+.idea/
+.vscode/
+*.iml

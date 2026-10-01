@@ -27,5 +27,13 @@ services:
       database:
         condition: service_healthy
 
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   postgres_data:
