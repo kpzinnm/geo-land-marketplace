@@ -1,160 +1,33 @@
 function LandDetailsPanel({ land, onBack, onClose }) {
   return (
-    <div className="flex h-full flex-col">
-      <div
-        className="
-          flex
-          items-center
-          justify-between
-          border-b
-          border-slate-200
-          px-5
-          py-4
-        "
-      >
-        <button
-          type="button"
-          onClick={onBack}
-          className="
-            text-sm
-            font-medium
-            text-slate-600
-            hover:text-slate-900
-          "
-        >
-          ← Back to results
-        </button>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="
-            rounded-lg
-            px-2
-            py-1
-            text-slate-400
-            hover:bg-slate-100
-          "
-        >
-          ×
-        </button>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-slate-200 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <button type="button" onClick={onBack} className="rounded text-sm font-medium text-slate-600 transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">← Back to results</button>
+          <button type="button" onClick={onClose} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-lg text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600" aria-label="Close land details">×</button>
+        </div>
       </div>
-
-      <div
-        className="
-          flex-1
-          overflow-y-auto
-          p-6
-        "
-      >
-        <p
-          className="
-            text-xs
-            font-semibold
-            uppercase
-            tracking-wide
-            text-emerald-600
-          "
-        >
-          Available land
-        </p>
-
-        <h2
-          className="
-            mt-2
-            text-2xl
-            font-semibold
-            text-slate-900
-          "
-        >
-          {formatPrice(land.price)}
-        </h2>
-
-        <div
-          className="
-            mt-6
-            space-y-6
-          "
-        >
-          <section>
-            <h3
-              className="
-                text-xs
-                font-semibold
-                uppercase
-                tracking-wide
-                text-slate-400
-              "
-            >
-              Description
-            </h3>
-
-            <p
-              className="
-                mt-2
-                text-sm
-                leading-6
-                text-slate-700
-              "
-            >
-              {land.description}
-            </p>
-          </section>
-
-          <section>
-            <h3
-              className="
-                text-xs
-                font-semibold
-                uppercase
-                tracking-wide
-                text-slate-400
-              "
-            >
-              Contact
-            </h3>
-
-            <p
-              className="
-                mt-2
-                break-all
-                text-sm
-                font-medium
-                text-slate-700
-              "
-            >
-              {land.contact}
-            </p>
-          </section>
-
-          <section>
-            <h3
-              className="
-                text-xs
-                font-semibold
-                uppercase
-                tracking-wide
-                text-slate-400
-              "
-            >
-              Land ID
-            </h3>
-
-            <p
-              className="
-                mt-2
-                break-all
-                font-mono
-                text-xs
-                text-slate-500
-              "
-            >
-              {land.id}
-            </p>
-          </section>
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div>
+          <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-emerald-700">Available land</span>
+          <h2 className="mt-3 break-words text-3xl font-semibold tracking-tight text-slate-950">{formatPrice(land.price)}</h2>
+        </div>
+        <div className="mt-7 space-y-6">
+          <DetailSection label="Description" value={land.description} />
+          <DetailSection label="Contact" value={land.contact} />
+          <DetailSection label="Land ID" value={land.id} mono />
         </div>
       </div>
     </div>
+  );
+}
+
+function DetailSection({ label, value, mono = false }) {
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</h3>
+      <p className={`mt-2 break-words leading-6 text-slate-700 ${mono ? "font-mono text-xs" : "text-sm"}`}>{value || "—"}</p>
+    </section>
   );
 }
 

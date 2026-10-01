@@ -1,6 +1,25 @@
 @import "tailwindcss";
 @import "ol/ol.css";
 
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color: #0f172a;
+  background: #f8fafc;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 html,
 body,
 #root {
@@ -9,6 +28,80 @@ body,
   margin: 0;
 }
 
+html {
+  background: #f8fafc;
+}
+
 body {
   min-width: 320px;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: #a7f3d0;
+  color: #064e3b;
+}
+
+/*
+ * OpenLayers visual adjustments.
+ *
+ * We keep OpenLayers behavior untouched and only
+ * make its built-in controls match the application.
+ */
+
+.ol-control button {
+  width: 2.25rem;
+  height: 2.25rem;
+
+  border-radius: 0.75rem;
+
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 4px 12px rgba(15, 23, 42, 0.08);
+
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.ol-control button:hover,
+.ol-control button:focus {
+  background: #ffffff;
+  color: #059669;
+}
+
+.ol-control button:active {
+  transform: scale(0.96);
+}
+
+.ol-zoom {
+  top: 1rem;
+  left: 1rem;
+}
+
+.ol-attribution {
+  border-radius: 0.75rem 0 0 0;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 640px) {
+  .ol-zoom {
+    top: 0.75rem;
+    left: 0.75rem;
+  }
 }

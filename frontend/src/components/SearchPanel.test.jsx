@@ -84,4 +84,32 @@ describe("SearchPanel", () => {
       }),
     ).toBeDisabled();
   });
+
+  it("transitions from no area to ready to searching and blocks cancellation", () => {
+    const onCancel = vi.fn();
+    const onSearch = vi.fn();
+    const props = { onCancel, onSearch };
+    const { rerender } = render(<SearchPanel {...props} searchArea={null} loading={false} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Draw a search area");
+    expect(screen.getByText("—")).toBeInTheDocument();
+    const searchArea = { radiusMeters: 500 };
+    rerender(<SearchPanel {...props} searchArea={searchArea} loading={false} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Search area ready");
+    expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
+    rerender(<SearchPanel {...props} searchArea={searchArea} loading />);
+    expect(screen.getByRole("status")).toHaveTextContent("Searching lands...");
+    expect(screen.getByRole("button", { name: "Searching..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).not.toHaveBeenCalled();
+    rerender(<SearchPanel {...props} searchArea={searchArea} loading={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it.each([[0, "0 lands found"], [1, "1 land found"], [2, "2 lands found"]])("renders completed result count %i", (resultCount, text) => {
+    render(<SearchPanel searchArea={null} resultCount={resultCount} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
 });

@@ -14,7 +14,7 @@ describe("LandResultsPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/no lands were found/i)).toBeInTheDocument();
+    expect(screen.getByText(/no lands found/i)).toBeInTheDocument();
   });
 
   it("renders search results", () => {
@@ -69,4 +69,12 @@ describe("LandResultsPanel", () => {
 
     expect(onSelectLand).toHaveBeenCalledWith(land);
   });
+
+  it("closes through a named button", () => {
+    const onClose = vi.fn();
+    render(<LandResultsPanel lands={[]} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Close search results" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
 });
