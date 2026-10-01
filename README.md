@@ -1,105 +1,76 @@
 # Geo Land Marketplace
 
-A geospatial land-listing MVP with React, OpenLayers, Spring Boot and PostGIS.
-Draw a land polygon, provide its price, description and contact, and register it.
-PostGIS rejects overlapping interiors and finds parcels intersecting a circular
-search area. The frontend displays the radius while drawing, renders search results
-on the map and in a sidebar, and focuses/highlights a selected parcel with its details.
-Authentication, offers, editing and deletion are outside this MVP.
+Geo Land Marketplace is a geospatial land-listing MVP. Users can draw and register a land parcel, search within a circular area, and inspect matching parcels on a map. The application uses React and OpenLayers in the frontend, Spring Boot in the backend, and PostgreSQL with PostGIS for spatial storage and queries.
+
+## Features
+
+- Register a polygon with a price, description, and contact.
+- Reject parcels whose interiors overlap an existing parcel. Shared edges and vertices are allowed.
+- Search for parcels that intersect a circle with a radius of up to 100 km.
+- Show search results on the map and in a sidebar; select a parcel to focus it and view its details.
+
+Authentication, offers, editing, and deletion are outside the MVP.
 
 ## Architecture
 
 ```text
-Browser (React + OpenLayers)
-  | same-origin /api/* requests
+Browser
+  |
   v
-localhost:3000 -> frontend:80 (Nginx: static files and reverse proxy)
-                   |
-                   v
-                 backend:8080 (Spring Boot, Hibernate Spatial / JTS)
-                   |
-                   v
-                 database:5432 (PostgreSQL 16 + PostGIS 3.4)
+Frontend: React + OpenLayers
+  |
+  | same-origin /api requests through Nginx
+  v
+Backend: Spring Boot + Hibernate Spatial / JTS
+  |
+  v
+Database: PostgreSQL 16 + PostGIS 3.4
 ```
 
-Docker Compose provides the internal network and service-name DNS. The browser
-cannot resolve `backend` or `database`; it uses relative `/api/...` URLs. Nginx
-forwards the complete path to `http://backend:8080` without stripping `/api`.
-Other paths use the SPA's `index.html` fallback. Vite development retains its
-`/api` proxy to `http://localhost:8080`.
+Docker Compose starts the three services. Nginx serves the frontend and forwards `/api` requests to the backend. Flyway applies database migrations at startup, and Hibernate validates the resulting schema. PostGIS checks polygon overlap and performs distance-based searches.
 
-## Prerequisites
+## Run with Docker
 
-- Git to clone the repository.
-- Docker Engine/Desktop with the Docker Compose plugin (v2 or newer).
-- Internet access for initial images/dependencies and OpenStreetMap base-map tiles.
+You need Docker Engine or Docker Desktop with the Docker Compose plugin. The first build also needs internet access for images and dependencies; the map uses OpenStreetMap tiles.
 
-**The Docker workflow does not require Java, Maven, Node.js, Nginx, PostgreSQL or
-PostGIS installed on the host.** Host development additionally needs Java 21 and
-Node.js 22.12+ with npm; Maven is downloaded by the checked-in wrapper.
-
-## Quick start
-
-Clone this repository and enter its root directory. On a fresh clone:
+From a fresh clone, run:
 
 ```sh
 cp .env.example .env
-# Review .env and replace demonstration credentials as appropriate.
 docker compose up --build
 ```
 
-If `.env` already exists, keep it instead of overwriting it. Compose reads the root
-`.env` automatically; **do not run `source .env`**. Required database values fail
-with a clear configuration error when absent or empty. The example password is
-for local demonstration only. `.env` is ignored; `.env.example` belongs in Git.
+Review the demonstration credentials in `.env` before use. Compose reads this file automatically. Java, Maven, Node.js, PostgreSQL, and PostGIS are not required on the host for this workflow.
 
-For background execution and readiness checks:
+Open **http://localhost:3000**. The backend health endpoint is available at **http://localhost:8080/actuator/health**. The database is published on `localhost:5432` by default. Host ports can be changed in `.env` using `FRONTEND_PORT`, `BACKEND_PORT`, and `POSTGRES_PORT`.
+
+To run in the background and check startup:
 
 ```sh
 docker compose up -d --build --wait
 docker compose ps
 curl --fail http://localhost:8080/actuator/health
-curl -I http://localhost:3000
-curl --fail http://localhost:3000/api/v1/lands/search \
-  -H 'Content-Type: application/json' \
-  -d '{"longitude":-35.8811,"latitude":-7.2306,"radiusMeters":1500}'
 ```
 
-- Frontend: <http://localhost:3000>
-- Backend health: <http://localhost:8080/actuator/health> (`{"status":"UP"}`)
-- API: `http://localhost:8080/api/v1/lands` or same-origin `/api/v1/lands`
-- PostgreSQL: `localhost:5432` (credentials from `.env`)
+The expected Compose state is a healthy database, a healthy backend, and a running frontend. The frontend has no separate container healthcheck.
 
-Expected state: database **healthy**, backend **healthy**, frontend **running**.
-Database readiness uses `pg_isready`; backend startup waits for database health.
-Spring Boot runs Flyway and validates the schema before serving requests. The
-backend's image healthcheck uses `curl`, explicitly installed in its Java 21 runtime.
-Frontend startup waits for backend health. Readiness dependencies govern startup;
-they do not continuously restart dependents if a service later fails.
+### Try the application
 
-Both application images use multi-stage builds. The backend packages with the Maven
-Wrapper and runs as a non-root user. The frontend uses `npm ci` and `npm run build`
-in Node 22, then serves `dist/` with Nginx. Image builds intentionally skip tests;
-run the separate quality gates below **before the final image build**.
+In the browser, register a polygon with a price, description, and contact. Registering an overlapping polygon should produce a conflict. Then draw a search circle, run the search, and select a result to view its details. An area without matching parcels should show an empty result.
 
-## Using the map
+The user has reported completing the application flow successfully in a browser. The separate Docker verification recorded successful HTTP requests through Nginx for registration, overlap rejection, search, and retrieval; its author could not run a browser test in that verification session.
 
-1. Select **Register land**, click polygon vertices, and click the first point to
-   finish. Enter price, description and contact, then submit. Repeating an overlapping
-   polygon should show a conflict message.
-2. Select **Search area**, draw a circle and observe the radius. Select **Search**.
-3. Review the map polygons and the left result list. Select a result to focus and
-   highlight its polygon and display its details; use **Back to results** to return.
-4. Search an area without registered parcels to see the empty-state message.
+### Stop or reset
 
-Map interactions require a browser. See [full-stack verification](VERIFICATION.md)
-for executed checks and the acceptance steps that remain unverified.
+```sh
+docker compose down
+```
 
-## Run without application containers
+This preserves the database volume and its records. To delete the project's database volume and **all records stored in it**, use `docker compose down -v` only when you intend to reset disposable data. Changing credentials in `.env` does not change the credentials of an existing database volume.
 
-### Backend
+## Run locally
 
-From the root, create `.env` as above, then start only the database:
+For host development, use Java 21 and Node.js 22.12+ with npm. The Maven Wrapper downloads Maven as needed. Start the database with Compose, then run the backend from `backend/`:
 
 ```sh
 docker compose up -d database
@@ -107,33 +78,7 @@ cd backend
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-The `local` profile imports `../.env` as a Java properties file. It does not execute
-shell commands. Use simple `KEY=value` entries without `export` or shell quotes;
-escape backslashes using Java properties syntax. Run this command from `backend/`.
-The file is required by the local profile so missing configuration fails early.
-Host environment variables override file values. Tests use dynamic Testcontainers
-properties and never load `.env`.
-
-For a fully native setup, install PostgreSQL 16 and PostGIS 3.4, create a database and
-login matching `.env`, and provision the extension as an administrator:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
-```
-
-The application login must be able to create/use the `app` schema and run migrations.
-It need not be a superuser when the extension is already provisioned. Start the same
-Maven command above without the Docker database command. The native installation
-path is documented; runtime verification uses real PostGIS in Docker.
-
-For a packaged application with explicit environment variables, no local profile is
-needed. Set `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and
-`SPRING_DATASOURCE_PASSWORD`, then run `java -jar backend/target/backend-0.0.1-SNAPSHOT.jar`.
-Do not place real credentials in shared command histories or documentation.
-
-### Frontend
-
-In a second terminal, with the backend running at `localhost:8080`:
+The local profile reads `../.env`. Keep its entries as simple `KEY=value` lines. In another terminal, start the frontend:
 
 ```sh
 cd frontend
@@ -141,56 +86,25 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open the URL printed by Vite (normally `http://localhost:5173`). The existing Vite
-proxy targets port 8080. Changing `BACKEND_PORT` changes only Compose publishing,
-not the host Spring server or the Vite proxy. Use port 8080 for this development
-workflow, or explicitly adjust the proxy target when choosing another local port.
+Open the URL printed by Vite, normally **http://localhost:5173**. Its `/api` proxy targets the backend on `localhost:8080`. Changing `BACKEND_PORT` changes Compose's published port; it does not change this local development proxy.
 
-For a fully native workflow, the database must also be installed and configured as
-above. Native PostgreSQL installation is not part of the executed validation.
+A fully native setup also requires PostgreSQL and PostGIS configured with the database credentials and schema permissions described in the existing project configuration. The recorded local development check used a Docker database; a native PostgreSQL installation was not verified.
 
-## Environment variables
+## Essential API
 
-| Variable | Purpose / default |
-| --- | --- |
-| `POSTGRES_DB` | Database name; example `land_marketplace` |
-| `POSTGRES_USER` | Local database login; example `land_user` |
-| `POSTGRES_PASSWORD` | Required password; example is for local development only |
-| `POSTGRES_PORT` | Database host port, default `5432` |
-| `BACKEND_PORT` | Compose API host port, default `8080` |
-| `FRONTEND_PORT` | Compose Nginx host port, default `3000` |
-| `SPRING_DATASOURCE_URL` | Overrides the host JDBC URL; Compose uses hostname `database` |
-| `SPRING_DATASOURCE_USERNAME` | Overrides `POSTGRES_USER` for Spring |
-| `SPRING_DATASOURCE_PASSWORD` | Overrides `POSTGRES_PASSWORD` for Spring |
-| `SERVER_PORT` | Optional Spring HTTP port for a host process, default `8080` |
+Use `http://localhost:3000` as the base URL when the application runs through Compose. Requests and responses use JSON.
 
-Published Compose ports bind to localhost. Inside the Compose network the database
-is always `database:5432`, regardless of the host port. The frontend uses
-a same-origin proxy for `/api`; no unrestricted CORS policy is enabled. Host port
-changes do not change internal service ports. Root `.env` configures Compose, not
-the browser bundle. `VITE_API_BASE_URL` is an optional existing Vite build-time
-override; leave it unset for both standard workflows. Never put secrets in `VITE_*`
-variables. Frontend `.env*` files are excluded from the Docker build context so a
-local override cannot silently bake an external API URL into the image.
-
-## HTTP API
-
-Base URL through Nginx: `http://localhost:3000/api/v1/lands`. All bodies and responses use JSON.
-GeoJSON is a **geometry object**, not a Feature or FeatureCollection. Coordinates are
-`[longitude, latitude]` in WGS84/EPSG:4326; positions have exactly two finite numbers.
-OpenLayers clients displaying EPSG:3857 must transform coordinates at the API boundary.
-
-| Endpoint | Successful result | Client errors |
-| --- | --- | --- |
-| `POST /api/v1/lands` | `201`, land body and usable `Location` header | `400` invalid input, `409` overlap |
-| `GET /api/v1/lands/{id}` | `200`, land body | `400` malformed UUID, `404` missing land |
-| `POST /api/v1/lands/search` | `200`, array of complete land objects; `[]` if none | `400` invalid search |
-| `GET /actuator/health` | `200`, application/database health | `503` unhealthy |
+| Request                     | Result                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `POST /api/v1/lands`        | Creates a parcel (`201`); invalid input returns `400`, overlap returns `409`. |
+| `GET /api/v1/lands/{id}`    | Returns a parcel (`200`); a missing parcel returns `404`.                     |
+| `POST /api/v1/lands/search` | Returns an array of matching parcels (`200`), or `[]` when none match.        |
+| `GET /actuator/health`      | Reports backend health; this endpoint is available on the backend port.       |
 
 Register a parcel:
 
 ```sh
-curl -i -X POST http://localhost:3000/api/v1/lands \
+curl -i http://localhost:3000/api/v1/lands \
   -H 'Content-Type: application/json' \
   -d '{
     "price": 250000.00,
@@ -198,122 +112,53 @@ curl -i -X POST http://localhost:3000/api/v1/lands \
     "contact": "owner@example.com",
     "geometry": {
       "type": "Polygon",
-      "coordinates": [[[-35.90,-7.22],[-35.89,-7.22],[-35.89,-7.21],[-35.90,-7.21],[-35.90,-7.22]]]
+      "coordinates": [[
+        [-35.90, -7.22],
+        [-35.89, -7.22],
+        [-35.89, -7.21],
+        [-35.90, -7.21],
+        [-35.90, -7.22]
+      ]]
     }
   }'
 ```
 
-The response contains `id` (UUID), `price`, `description`, `contact`, `geometry`,
-`createdAt` and `updatedAt` (UTC timestamps). Follow the response's `Location`:
+Search around a point:
 
 ```sh
-curl http://localhost:3000/api/v1/lands/REPLACE_WITH_RETURNED_UUID
-curl -X POST http://localhost:3000/api/v1/lands/search \
+curl http://localhost:3000/api/v1/lands/search \
   -H 'Content-Type: application/json' \
   -d '{"longitude":-35.90,"latitude":-7.22,"radiusMeters":5000}'
 ```
 
-Repeating the same registration returns:
+Geometry is a GeoJSON **geometry object**, with `[longitude, latitude]` coordinates in WGS84/EPSG:4326. Search radius is measured in meters and must be greater than zero and no more than 100,000. Search includes parcels that partially intersect or touch the search area.
 
-```json
-{"code":"LAND_OVERLAP","message":"The land overlaps an existing land"}
-```
+## Limitations and troubleshooting
 
-Client errors use `code` and `message`. Validation errors intentionally provide a
-safe summary. Unexpected errors remain HTTP 500; stack traces are not returned.
+The MVP targets local parcels. Polygons crossing the antimeridian or spanning at least 180 degrees of longitude are unsupported. Search results are not paginated, and registrations are serialized to prevent concurrent overlap through the application. Writers that bypass the application can also bypass that overlap protocol. OpenStreetMap tiles require an external connection.
 
-### Spatial and validation contract
+For common startup issues:
 
-- Price is positive with at most 13 integer digits and 2 decimal places.
-- Description and contact cannot be blank. Contact is free text, not restricted to email.
-- Rings are closed with at least four positions. Valid interior holes are supported.
-  Empty, self-intersecting and zero-area polygons are rejected.
-- Longitude is in `[-180,180]`, latitude in `[-90,90]`. Polygons crossing the
-  antimeridian or spanning 180 degrees or more of longitude are unsupported and rejected.
-- Shared edges and vertices are allowed. Interior overlap, equality and containment
-  are rejected by `ST_Intersects AND NOT ST_Touches` in PostGIS.
-- Search radius must be finite and in `(0,100000]` **meters**. The agreed MVP limit is
-  100 km. `ST_DWithin(geometry::geography, point::geography, radius)` uses minimum
-  geodesic distance on the WGS84 spheroid, including partial intersections and tangency.
-  It does not use centroids, degree distances or Java-side filtering.
-- Polygon validity/overlap uses planar WGS84 coordinates; metric search interprets
-  edges geodesically. This MVP targets local parcels, not global/polar cadastral
-  precision. The antimeridian restriction avoids ambiguous polygon wrapping.
-- Search returns all matches, ordered by creation timestamp then ID, without pagination.
-  Large result sets and globally serialized registrations are scaling limitations.
+- **Missing configuration:** Copy `.env.example` to `.env` and check the required database values. Run `docker compose config --quiet` to validate Compose configuration.
+- **Port in use:** Change the corresponding host port in `.env` and restart Compose.
+- **Backend unhealthy:** Inspect `docker compose logs --tail=100 backend database` for database, credential, or migration errors.
+- **Database login fails after editing `.env`:** An existing database volume keeps its original users and passwords. Restore matching settings or update the credentials in PostgreSQL.
+- **Nginx returns 502 after the backend container was replaced separately:** Run `docker compose restart frontend`.
+- **Map tiles are missing:** Check the browser's connection to OpenStreetMap.
 
-## Architecture and consistency
-
-```text
-backend/src/main/java/com/landmarketplace/land/
-  api/                        HTTP controller, DTOs, GeoJSON mapper, error responses
-  application/                Create, find and search use cases; transaction boundaries
-  domain/                     Land invariants and LandRepository port
-  infrastructure/persistence/ JPA entity, explicit mapper, PostGIS queries, advisory lock
-```
-
-`Land` is separate from `LandJpaEntity`; the domain does not depend on JPA. It owns
-UUID/timestamp creation and defensively copies mutable JTS geometry. The database
-retains defaults for direct SQL inserts; PostgreSQL timestamps have microsecond
-precision. Domain and persistence mappers copy all seven fields.
-
-Registration runs at READ COMMITTED. It acquires `pg_advisory_xact_lock(724019, 1)`
-on the current Hibernate JDBC connection, checks overlap in a separate statement,
-and flushes the insert before commit. Separating the lock and check lets a waiting
-transaction see the previous committed insert. Rollback releases the lock as well.
-This deliberately serializes registrations across application instances. **All
-writers must follow this protocol**; direct SQL can bypass overlap prevention.
-The database's row-level checks still enforce valid individual records.
-
-## Database migrations
-
-Flyway owns the schema and runs automatically on application startup. Hibernate
-uses `ddl-auto: validate`; it does not generate or replace migrations. Docker setup
-requires no new migration.
-
-V1 enables PostGIS in `public`; V2 creates `app.lands`, its constraints and geometry
-GiST index. V3 adds a GiST expression index on `geometry::geography`: a 10,000-parcel
-query-plan experiment showed that V2's geometry index could not support this cast.
-Applied migrations are immutable. See the verification report for measured evidence.
+Compose publishes the services on `127.0.0.1` for local development and evaluation.
 
 ## Tests and coverage
 
-From `backend/`:
+Run the backend checks from `backend/`:
 
 ```sh
 ./mvnw clean verify
 ```
 
-This runs unit tests (Surefire), PostGIS/HTTP/concurrency integration tests (Failsafe),
-then the JaCoCo report and check. Docker must be reachable. Testcontainers starts a
-disposable PostGIS database, applies the real migrations and supplies credentials
-dynamically. It never uses the development database or `.env`. A missing Docker
-runtime is an explicit integration-test failure, not a skipped test.
+This runs unit and real PostGIS integration tests, generates a JaCoCo report, and enforces the configured coverage gate. Integration tests use Testcontainers and require a working Docker runtime; they use a disposable database rather than the development database.
 
-```sh
-# Unit tests only; no Docker needed. This is not the full verification gate.
-./mvnw test
-# Focused persistence regression, explicitly selected through Surefire:
-./mvnw -Dtest=LandRepositoryAdapterIntegrationTest test
-```
-
-Reports:
-
-- `backend/target/site/jacoco/index.html` (human-readable coverage)
-- `backend/target/site/jacoco/jacoco.xml` and `jacoco.csv`
-- `backend/target/surefire-reports/` and `backend/target/failsafe-reports/`
-- `backend/target/query-plans/` (synthetic search-plan evidence)
-
-The build requires **at least 81% line coverage**, strictly greater than 80%, across
-all production classes with no class exclusions. Coverage includes integration
-execution. Tests cover domain invariants, GeoJSON holes and invalid positions,
-persistence after clearing the JPA cache, spatial conflicts, metric search, real HTTP,
-and concurrent commit/rollback with observed PostgreSQL lock waiting.
-
-See [backend verification](backend/VERIFICATION.md) for actual commands, results,
-coverage denominators, query plans and remaining limitations.
-
-From `frontend/`:
+Run the frontend checks from `frontend/`:
 
 ```sh
 npm ci
@@ -322,52 +167,15 @@ npm run test:coverage
 npm run build
 ```
 
-Vitest uses Testing Library, jsdom and V8 coverage. Reports are written to
-`frontend/coverage/` (HTML: `index.html`). Current coverage is scoped to files
-instrumented by the existing test suite; it is not proof of browser/map end-to-end
-coverage. The OpenLayers interaction flow also needs the manual acceptance above.
+The recorded verification on **2026-10-01** reported:
 
-After both quality gates pass, run `docker compose up -d --build --wait` from the
-root. See [full-stack verification](VERIFICATION.md) for measured results.
+| Area     | Tests                                         | Coverage                                                                            |
+| -------- | --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Backend  | 33 unit tests and 18 integration tests passed | JaCoCo: **97.98% lines**, **92.16% branches**                                       |
+| Frontend | 15 tests passed                               | Vitest/V8: **94.33% lines and statements**, **75.60% branches**, **100% functions** |
 
-## Stop and reset the database
+The backend build passed its JaCoCo gate, which requires at least 81% line coverage across production classes. Reports are generated at `backend/target/site/jacoco/index.html`, with test reports under `backend/target/surefire-reports/` and `backend/target/failsafe-reports/`. Frontend coverage is available at `frontend/coverage/index.html`.
 
-```sh
-docker compose down
-```
+**Frontend coverage has a limited measurement scope.** Its report covers the tested API client, components, and map utility; it does not include `App`, `LandMapPage`, or `MapView`. These percentages do not represent whole-application or browser end-to-end coverage. The map interaction flow therefore also relies on manual browser validation.
 
-This removes containers and the network but **preserves the named database volume**.
-Starting the same Compose project again reuses its data.
-
-**DESTRUCTIVE: the following command deletes the project's named volume and ALL
-local database records. Use it only when intentionally resetting disposable data.**
-
-```sh
-docker compose down -v
-```
-
-Existing volumes retain their original database users/passwords. Editing `.env`
-does not change those credentials. Restore matching configuration or deliberately
-update credentials inside PostgreSQL; do not delete data to fix authentication.
-
-## Troubleshooting
-
-- **Port already in use:** set `POSTGRES_PORT`, `BACKEND_PORT` or `FRONTEND_PORT` in
-  `.env` to a free host port, then rerun Compose. Internal DNS/ports stay unchanged.
-- **Unhealthy backend:** inspect `docker compose logs --tail=100 backend database`.
-  Check credentials, migration errors and database readiness. Use
-  `docker compose exec backend curl --fail --silent http://localhost:8080/actuator/health`.
-- **Database authentication:** ensure `.env` matches the existing volume's original
-  credentials; changing environment values alone does not change PostgreSQL users.
-- **Missing configuration:** copy `.env.example` to `.env` on a fresh checkout and
-  populate required values. Validate with `docker compose config --quiet`.
-- **Rebuild after source changes:** use `docker compose up -d --build --wait`.
-  If the backend was replaced independently and Nginx returns 502, use
-  `docker compose restart frontend` to refresh its upstream DNS resolution.
-- **View logs:** `docker compose logs -f` or `docker compose logs -f backend`.
-- **Map tiles missing:** check browser connectivity to OpenStreetMap; the tile
-  service is external to Compose. Loading static HTML alone does not prove map rendering.
-
-Compose publishes database, backend and frontend only on `127.0.0.1` for local
-work. This is a development/evaluation topology, not an Internet-facing deployment.
-Never publish `.env` or resolved `docker compose config` output containing secrets.
+The frontend production build passed in the recorded verification, with an existing warning for a JavaScript chunk above 500 kB. See `VERIFICATION.md` for the detailed commands and evidence behind these results.
