@@ -21,11 +21,15 @@ function LandMapPage() {
 
   const [selectedLand, setSelectedLand] = useState(null);
 
+  const [hoveredLand, setHoveredLand] = useState(null);
+
   const [loading, setLoading] = useState(false);
 
   const [message, setMessage] = useState(null);
 
   const [resetKey, setResetKey] = useState(0);
+
+  const [fitResultsKey, setFitResultsKey] = useState(0);
 
   const handlePolygonDrawn = useCallback((geometry) => {
     setPolygon(geometry);
@@ -40,12 +44,20 @@ function LandMapPage() {
     setResetKey((current) => current + 1);
   }
 
+  function fitSearchResults() {
+    setSelectedLand(null);
+    setHoveredLand(null);
+
+    setFitResultsKey((current) => current + 1);
+  }
+
   function startRegistration() {
     setMode("register");
 
     setPolygon(null);
     setSearchArea(null);
     setSelectedLand(null);
+    setHoveredLand(null);
     setSearchResults([]);
     setHasSearched(false);
     setMessage(null);
@@ -59,6 +71,7 @@ function LandMapPage() {
     setPolygon(null);
     setSearchArea(null);
     setSelectedLand(null);
+    setHoveredLand(null);
     setSearchResults([]);
     setHasSearched(false);
     setMessage(null);
@@ -71,15 +84,23 @@ function LandMapPage() {
 
     setPolygon(null);
     setSearchArea(null);
+    setSelectedLand(null);
+    setHoveredLand(null);
+    setSearchResults([]);
+    setHasSearched(false);
     setMessage(null);
 
     resetInteraction();
   }
 
-  function closeSearchResults() {
+  function clearSearchContext() {
     setSelectedLand(null);
+    setHoveredLand(null);
     setSearchResults([]);
+    setSearchArea(null);
     setHasSearched(false);
+
+    resetInteraction();
   }
 
   async function handleCreateLand(payload) {
@@ -143,20 +164,11 @@ function LandMapPage() {
       const lands = Array.isArray(response) ? response : [];
 
       setSearchResults(lands);
-
-      /*
-       * A completed search and an empty search
-       * are different from "no search performed".
-       */
       setHasSearched(true);
-
       setSelectedLand(null);
+      setHoveredLand(null);
 
       setMode("browse");
-
-      setSearchArea(null);
-
-      resetInteraction();
     } catch (error) {
       setHasSearched(false);
 
@@ -189,9 +201,10 @@ function LandMapPage() {
                 z-20
                 bg-slate-950/20
                 backdrop-blur-[1px]
+
                 lg:hidden
               "
-              onClick={closeSearchResults}
+              onClick={clearSearchContext}
               aria-hidden="true"
             />
 
@@ -218,14 +231,20 @@ function LandMapPage() {
               {selectedLand ? (
                 <LandDetailsPanel
                   land={selectedLand}
+                  searchRadiusMeters={searchArea?.radiusMeters}
                   onBack={() => setSelectedLand(null)}
-                  onClose={closeSearchResults}
+                  onClose={clearSearchContext}
                 />
               ) : (
                 <LandResultsPanel
                   lands={searchResults}
+                  selectedLand={selectedLand}
+                  hoveredLand={hoveredLand}
+                  searchRadiusMeters={searchArea?.radiusMeters}
                   onSelectLand={setSelectedLand}
-                  onClose={closeSearchResults}
+                  onHoverLand={setHoveredLand}
+                  onFitResults={fitSearchResults}
+                  onClose={clearSearchContext}
                 />
               )}
             </aside>
@@ -238,9 +257,12 @@ function LandMapPage() {
             onPolygonDrawn={handlePolygonDrawn}
             onSearchAreaChange={handleSearchAreaChange}
             resetKey={resetKey}
+            fitResultsKey={fitResultsKey}
             searchResults={searchResults}
             selectedLand={selectedLand}
+            hoveredLand={hoveredLand}
             onLandSelected={setSelectedLand}
+            onLandHover={setHoveredLand}
           />
 
           {mode === "browse" && !hasSearched && <BrowseHint />}
@@ -256,18 +278,16 @@ function LandMapPage() {
           )}
 
           {mode === "search" && (
-            <>
-              <MapInstruction
-                eyebrow="Spatial search"
-                title="Draw a search area"
-              >
-                Click and drag anywhere on the map to define the search radius.
-              </MapInstruction>
+            <MapInstruction eyebrow="Spatial search" title="Draw a search area">
+              Click and drag anywhere on the map to define the search radius.
+            </MapInstruction>
+          )}
 
-              {searchArea && (
-                <SearchRadiusBadge radiusMeters={searchArea.radiusMeters} />
-              )}
-            </>
+          {searchArea && (
+            <SearchRadiusBadge
+              radiusMeters={searchArea.radiusMeters}
+              completed={hasSearched}
+            />
           )}
         </section>
 
@@ -280,6 +300,7 @@ function LandMapPage() {
                 z-20
                 bg-slate-950/20
                 backdrop-blur-[1px]
+
                 lg:hidden
               "
               onClick={cancelCurrentMode}
@@ -641,7 +662,7 @@ function MapInstruction({ eyebrow, title, children }) {
   );
 }
 
-function SearchRadiusBadge({ radiusMeters }) {
+function SearchRadiusBadge({ radiusMeters, completed = false }) {
   return (
     <div
       className="
@@ -669,7 +690,9 @@ function SearchRadiusBadge({ radiusMeters }) {
           backdrop-blur-md
         "
       >
-        <span className="text-xs text-slate-500">Radius</span>
+        <span className="text-xs text-slate-500">
+          {completed ? "Search area" : "Radius"}
+        </span>
 
         <span className="text-sm font-semibold tabular-nums text-blue-600">
           {formatRadius(radiusMeters)}
