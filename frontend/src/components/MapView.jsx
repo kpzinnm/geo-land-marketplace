@@ -19,13 +19,11 @@ import Style from "ol/style/Style";
 import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
 
-import { fromLonLat, toLonLat } from "ol/proj";
-
-import { getDistance } from "ol/sphere";
-
-import { circleToSearchArea } from "../utils/mapUtils";
+import { fromLonLat } from "ol/proj";
 
 import { unByKey } from "ol/Observable";
+
+import { circleToSearchArea } from "../utils/mapUtils";
 
 const candidateStyle = new Style({
   fill: new Fill({
@@ -61,6 +59,17 @@ const resultStyle = new Style({
   }),
 });
 
+const hoveredResultStyle = new Style({
+  fill: new Fill({
+    color: "rgba(16, 185, 129, 0.38)",
+  }),
+
+  stroke: new Stroke({
+    color: "#047857",
+    width: 4,
+  }),
+});
+
 const selectedResultStyle = new Style({
   fill: new Fill({
     color: "rgba(5, 150, 105, 0.45)",
@@ -77,9 +86,12 @@ function MapView({
   onPolygonDrawn,
   onSearchAreaChange,
   resetKey,
+  fitResultsKey,
   searchResults,
   selectedLand,
+  hoveredLand,
   onLandSelected,
+  onLandHover,
 }) {
   const mapElementRef = useRef(null);
 
@@ -93,13 +105,6 @@ function MapView({
 
   /*
    * Initializes the OpenLayers map.
-   *
-   * This effect is responsible for creating:
-   *
-   * - the base map;
-   * - the interaction layer;
-   * - the search result layer;
-   * - the click handler.
    */
   useEffect(() => {
     if (mapRef.current) {
@@ -114,7 +119,9 @@ function MapView({
       source: interactionSource,
 
       style: (feature) => {
-        const geometryType = feature.getGeometry().getType();
+        const geometry = feature.getGeometry();
+
+        const geometryType = geometry?.getType();
 
         if (geometryType === "Circle") {
           return searchCircleStyle;
@@ -124,17 +131,23 @@ function MapView({
       },
     });
 
-    /*
-     * This layer contains lands returned
-     * by the search endpoint.
-     */
     const resultsLayer = new VectorLayer({
       source: resultsSource,
 
       style: (feature) => {
         const selected = feature.get("selected");
 
-        return selected ? selectedResultStyle : resultStyle;
+        const hovered = feature.get("hovered");
+
+        if (selected) {
+          return selectedResultStyle;
+        }
+
+        if (hovered) {
+          return hoveredResultStyle;
+        }
+
+        return resultStyle;
       },
     });
 
@@ -158,27 +171,22 @@ function MapView({
       }),
     });
 
-    /*
-     * Allows the user to select a land
-     * directly by clicking its polygon.
-     */
-    const clickKey = map.on("singleclick", (event) => {
-      const feature = map.forEachFeatureAtPixel(
-        event.pixel,
+    function getResultFeature(pixel) {
+      return (
+        map.forEachFeatureAtPixel(
+          pixel,
 
-        (candidateFeature) => candidateFeature,
+          (feature) => feature,
 
-        {
-          /*
-           * Ignore the search circle
-           * and registration polygon.
-           *
-           * Only search result features
-           * can be selected.
-           */
-          layerFilter: (layer) => layer === resultsLayer,
-        },
+          {
+            layerFilter: (layer) => layer === resultsLayer,
+          },
+        ) || null
       );
+    }
+
+    const clickKey = map.on("singleclick", (event) => {
+      const feature = getResultFeature(event.pixel);
 
       if (!feature) {
         return;
@@ -190,7 +198,27 @@ function MapView({
         return;
       }
 
+      onLandHover?.(null);
+
       onLandSelected?.(land);
+    });
+
+    const pointerMoveKey = map.on("pointermove", (event) => {
+      if (event.dragging) {
+        return;
+      }
+
+      const feature = getResultFeature(event.pixel);
+
+      const land = feature?.get("land");
+
+      onLandHover?.(land || null);
+
+      const target = map.getTargetElement();
+
+      if (target) {
+        target.style.cursor = land ? "pointer" : "";
+      }
     });
 
     mapRef.current = map;
@@ -201,6 +229,13 @@ function MapView({
 
     return () => {
       unByKey(clickKey);
+      unByKey(pointerMoveKey);
+
+      const target = map.getTargetElement();
+
+      if (target) {
+        target.style.cursor = "";
+      }
 
       map.setTarget(undefined);
 
@@ -210,20 +245,11 @@ function MapView({
 
       resultsSourceRef.current = null;
     };
-  }, [onLandSelected]);
+  }, [onLandHover, onLandSelected]);
 
   /*
-   * Controls the drawing tool according
-   * to the current application mode.
-   *
-   * browse:
-   *   no drawing interaction
-   *
-   * register:
-   *   polygon drawing
-   *
-   * search:
-   *   circle drawing
+   * Controls drawing according
+   * to the current mode.
    */
   useEffect(() => {
     const map = mapRef.current;
@@ -234,10 +260,6 @@ function MapView({
       return;
     }
 
-    /*
-     * Remove a previous drawing interaction
-     * before adding another one.
-     */
     if (drawInteractionRef.current) {
       map.removeInteraction(drawInteractionRef.current);
 
@@ -252,16 +274,13 @@ function MapView({
 
     const draw = new Draw({
       source: interactionSource,
+
       type: geometryType,
     });
 
     let geometryChangeKey = null;
 
     draw.on("drawstart", (event) => {
-      /*
-       * Only one temporary geometry
-       * should exist at a time.
-       */
       interactionSource.clear();
 
       if (mode === "register") {
@@ -273,14 +292,6 @@ function MapView({
 
         const circle = event.feature.getGeometry();
 
-        /*
-         * During mouse movement,
-         * the Circle geometry changes.
-         *
-         * We listen to this event so
-         * the radius displayed in the
-         * sidebar updates dynamically.
-         */
         geometryChangeKey = circle.on("change", () => {
           const searchArea = circleToSearchArea(circle);
 
@@ -296,9 +307,6 @@ function MapView({
         geometryChangeKey = null;
       }
 
-      /*
-       * Registration polygon.
-       */
       if (mode === "register") {
         const geometry = event.feature.getGeometry();
 
@@ -313,9 +321,6 @@ function MapView({
         onPolygonDrawn?.(geoJson);
       }
 
-      /*
-       * Search circle.
-       */
       if (mode === "search") {
         const circle = event.feature.getGeometry();
 
@@ -342,20 +347,10 @@ function MapView({
     };
   }, [mode, onPolygonDrawn, onSearchAreaChange]);
 
-  /*
-   * Clears temporary interaction geometry.
-   *
-   * Changing resetKey from the parent
-   * triggers this effect.
-   */
   useEffect(() => {
     interactionSourceRef.current?.clear();
   }, [resetKey]);
 
-  /*
-   * Converts backend search results into
-   * OpenLayers Features.
-   */
   useEffect(() => {
     const source = resultsSourceRef.current;
 
@@ -372,13 +367,6 @@ function MapView({
     const geoJson = new GeoJSON();
 
     const features = searchResults.map((land) => {
-      /*
-       * Backend:
-       * EPSG:4326
-       *
-       * OpenLayers:
-       * EPSG:3857
-       */
       const geometry = geoJson.readGeometry(land.geometry, {
         dataProjection: "EPSG:4326",
 
@@ -390,21 +378,17 @@ function MapView({
       });
 
       /*
-       * Connect backend identity with
-       * OpenLayers identity.
+       * React/API identity and
+       * OpenLayers identity use
+       * the same land ID.
        */
       feature.setId(land.id);
 
-      /*
-       * Store the complete backend
-       * object inside the Feature.
-       *
-       * This allows map clicks to recover
-       * the corresponding land.
-       */
       feature.set("land", land);
 
       feature.set("selected", false);
+
+      feature.set("hovered", false);
 
       return feature;
     });
@@ -412,15 +396,6 @@ function MapView({
     source.addFeatures(features);
   }, [searchResults]);
 
-  /*
-   * Reacts whenever selectedLand changes.
-   *
-   * Responsibilities:
-   *
-   * 1. remove previous visual selection;
-   * 2. highlight selected polygon;
-   * 3. move the map to that polygon.
-   */
   useEffect(() => {
     const map = mapRef.current;
 
@@ -430,18 +405,10 @@ function MapView({
       return;
     }
 
-    /*
-     * First remove selection from
-     * every result.
-     */
     source.getFeatures().forEach((feature) => {
       feature.set("selected", false);
     });
 
-    /*
-     * No land selected means all features
-     * should use the normal style.
-     */
     if (!selectedLand) {
       return;
     }
@@ -452,11 +419,6 @@ function MapView({
       return;
     }
 
-    /*
-     * Changing this property causes the
-     * layer style function to use
-     * selectedResultStyle.
-     */
     selectedFeature.set("selected", true);
 
     const geometry = selectedFeature.getGeometry();
@@ -465,19 +427,6 @@ function MapView({
       return;
     }
 
-    /*
-     * getExtent returns the bounding box:
-     *
-     * [
-     *   minX,
-     *   minY,
-     *   maxX,
-     *   maxY
-     * ]
-     *
-     * fit() calculates a suitable center
-     * and zoom automatically.
-     */
     map.getView().fit(geometry.getExtent(), {
       duration: 600,
 
@@ -487,15 +436,62 @@ function MapView({
     });
   }, [selectedLand]);
 
-  return (
-    <div
-      ref={mapElementRef}
-      className="
-        h-full
-        w-full
-      "
-    />
-  );
+  /*
+   * Synchronizes hover state
+   * from either the result list
+   * or the map.
+   */
+  useEffect(() => {
+    const source = resultsSourceRef.current;
+
+    if (!source) {
+      return;
+    }
+
+    source.getFeatures().forEach((feature) => {
+      feature.set("hovered", false);
+    });
+
+    if (!hoveredLand) {
+      return;
+    }
+
+    const hoveredFeature = source.getFeatureById(hoveredLand.id);
+
+    if (!hoveredFeature) {
+      return;
+    }
+
+    hoveredFeature.set("hovered", true);
+  }, [hoveredLand]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    const source = resultsSourceRef.current;
+
+    if (!map || !source) {
+      return;
+    }
+
+    const features = source.getFeatures();
+
+    if (features.length === 0) {
+      return;
+    }
+
+    const extent = source.getExtent();
+
+    map.getView().fit(extent, {
+      duration: 600,
+
+      maxZoom: 16,
+
+      padding: [80, 80, 80, 80],
+    });
+  }, [fitResultsKey]);
+
+  return <div ref={mapElementRef} className="h-full w-full" />;
 }
 
 export default MapView;
