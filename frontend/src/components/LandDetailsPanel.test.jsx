@@ -39,4 +39,12 @@ describe("LandDetailsPanel", () => {
 
     expect(onBack).toHaveBeenCalledOnce();
   });
+
+  it("closes through a named button", () => {
+    const onClose = vi.fn();
+    render(<LandDetailsPanel land={land} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Close land details" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
 });

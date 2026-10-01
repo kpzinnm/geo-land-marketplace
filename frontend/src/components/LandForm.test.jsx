@@ -82,4 +82,23 @@ describe("LandForm", () => {
       geometry: polygon,
     });
   });
+
+  it("shows polygon readiness and blocks actions while registering", () => {
+    const onCancel = vi.fn();
+    const onSubmit = vi.fn();
+    const { rerender } = render(<LandForm polygon={null} loading={false} onCancel={onCancel} onSubmit={onSubmit} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Draw the land boundary first");
+    expect(screen.getByLabelText("Price")).toHaveAccessibleDescription("Total asking price in BRL");
+    rerender(<LandForm polygon={{ type: "Polygon" }} loading onCancel={onCancel} onSubmit={onSubmit} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Land boundary ready");
+    expect(screen.getByRole("button", { name: "Registering..." })).toBeDisabled();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toBeDisabled();
+    fireEvent.click(cancel);
+    expect(onCancel).not.toHaveBeenCalled();
+    rerender(<LandForm polygon={null} loading={false} onCancel={onCancel} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
 });
