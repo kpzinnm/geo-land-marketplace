@@ -167,15 +167,17 @@ npm run test:coverage
 npm run build
 ```
 
-The recorded verification on **2026-10-01** reported:
+`test:run` runs the suite once. `test:coverage` runs the same suite with V8 coverage enabled; it can be used on its own when you need both test results and a coverage report.
+
+The recorded results on **2026-10-01** are shown below. Frontend results reflect the developer-provided runs at 11:12 after the latest component/test changes; backend results come from the earlier verification.
 
 | Area     | Tests                                         | Coverage                                                                            |
 | -------- | --------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Backend  | 33 unit tests and 18 integration tests passed | JaCoCo: **97.98% lines**, **92.16% branches**                                       |
-| Frontend | 15 tests passed                               | Vitest/V8: **94.33% lines and statements**, **75.60% branches**, **100% functions** |
+| Frontend | 28 tests passed in 6 files                    | Vitest/V8: **88.37% lines and statements**, **81.48% branches**, **100% functions** |
 
 The backend build passed its JaCoCo gate, which requires at least 81% line coverage across production classes. Reports are generated at `backend/target/site/jacoco/index.html`, with test reports under `backend/target/surefire-reports/` and `backend/target/failsafe-reports/`. Frontend coverage is available at `frontend/coverage/index.html`.
 
 **Frontend coverage has a limited measurement scope.** Its report covers the tested API client, components, and map utility; it does not include `App`, `LandMapPage`, or `MapView`. These percentages do not represent whole-application or browser end-to-end coverage. The map interaction flow therefore also relies on manual browser validation.
 
-The frontend production build passed in the recorded verification, with an existing warning for a JavaScript chunk above 500 kB. See `VERIFICATION.md` for the detailed commands and evidence behind these results.
+The frontend production build passed in the earlier verification, with an existing warning for a JavaScript chunk above 500 kB. The latest supplied test output does not include a new build result. See [the verification report](VERIFICATION.md) for the detailed commands and evidence behind these results.
